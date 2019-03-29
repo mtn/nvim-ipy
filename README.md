@@ -1,3 +1,5 @@
+This is probably a permanent fork of nvim-ipy. It changes mostly UI implementations.
+
 # nvim-ipy
 This is a Jupyter front-end for Neovim, partially based on [ivanov/vim-ipython](https://github.com/ivanov/vim-ipython), but refactored for nvim's plugin architechture and improved async event handling. Jupyter 4.x or later is required. It uses python3 per default; see below for notes on using python2. It has full support for non-python kernels.
 
