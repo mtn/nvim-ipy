@@ -125,5 +125,3 @@ if g:nvim_ipy_perform_mappings
     map <silent> <leader>? <Plug>(IPy-WordObjInfo)
     "set titlestring=%t%(\ %M%)%(\ (%{expand(\"%:p:h\")})%)%(\ %a%)%(\ -\ %{g:ipy_status}%)
 endif
-
-

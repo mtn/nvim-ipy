@@ -18,60 +18,79 @@ from jupyter_core import version_info
 import greenlet
 from traceback import format_exc
 
-from .ansi_code_processor import AnsiCodeProcessor, NewLineAction, CarriageReturnAction, BackSpaceAction
+from .ansi_code_processor import (
+    AnsiCodeProcessor,
+    NewLineAction,
+    CarriageReturnAction,
+    BackSpaceAction,
+)
 
 # from http://serverfault.com/questions/71285/in-centos-4-4-how-can-i-strip-escape-sequences-from-a-text-file
-strip_ansi = re.compile('\x1B\[([0-9]{1,2}(;[0-9]{1,2})?)?[m|K]')
+strip_ansi = re.compile("\x1B\[([0-9]{1,2}(;[0-9]{1,2})?)?[m|K]")
 
 import logging
+
 logger = logging.getLogger(__name__)
-error, debug, info, warn = (logger.error, logger.debug, logger.info, logger.warn,)
-if 'NVIM_IPY_DEBUG_FILE' in os.environ:
-    logfile = os.environ['NVIM_IPY_DEBUG_FILE'].strip()
-    logger.addHandler(logging.FileHandler(logfile, 'w'))
+error, debug, info, warn = (logger.error, logger.debug, logger.info, logger.warn)
+if "NVIM_IPY_DEBUG_FILE" in os.environ:
+    logfile = os.environ["NVIM_IPY_DEBUG_FILE"].strip()
+    logger.addHandler(logging.FileHandler(logfile, "w"))
     logger.level = logging.DEBUG
+
 
 class RedirectingKernelManager(KernelManager):
     def _launch_kernel(self, cmd, **b):
         # stdout is used to communicate with nvim, redirect it somewhere else
-        nullfile = "/dev/null" if os.name != 'nt' else 'NUL'
-        self._null = open(nullfile,"wb",0)
-        b['stdout'] = self._null.fileno()
-        b['stderr'] = self._null.fileno()
+        nullfile = "/dev/null" if os.name != "nt" else "NUL"
+        self._null = open(nullfile, "wb", 0)
+        b["stdout"] = self._null.fileno()
+        b["stderr"] = self._null.fileno()
         return super(RedirectingKernelManager, self)._launch_kernel(cmd, **b)
+
 
 # because Dependency Injection
 def fakefactory(factory, handler):
     class theclass(factory):
         call_handlers = handler
+
     return theclass
+
 
 class JupyterVimApp(JupyterApp, JupyterConsoleApp):
     # don't use blocking client; we override call_handlers below
     kernel_client_class = ThreadedKernelClient
     kernel_manager_class = RedirectingKernelManager
-    aliases = JupyterConsoleApp.aliases #this the way?
+    aliases = JupyterConsoleApp.aliases  # this the way?
     flags = JupyterConsoleApp.flags
+
     def init_kernel_client(self):
-        #TODO: cleanup this (by subclassing kernel_clinet or something)
+        # TODO: cleanup this (by subclassing kernel_clinet or something)
         if self.kernel_manager is not None:
             self.kernel_client = self.kernel_manager.client()
         else:
             self.kernel_client = self.kernel_client_class(
-                                session=self.session,
-                                ip=self.ip,
-                                transport=self.transport,
-                                shell_port=self.shell_port,
-                                iopub_port=self.iopub_port,
-                                stdin_port=self.stdin_port,
-                                hb_port=self.hb_port,
-                                connection_file=self.connection_file,
-                                parent=self,
+                session=self.session,
+                ip=self.ip,
+                transport=self.transport,
+                shell_port=self.shell_port,
+                iopub_port=self.iopub_port,
+                stdin_port=self.stdin_port,
+                hb_port=self.hb_port,
+                connection_file=self.connection_file,
+                parent=self,
             )
-        self.kernel_client.shell_channel_class = fakefactory(self.kernel_client.shell_channel_class, self.target.on_shell_msg)
-        self.kernel_client.iopub_channel_class = fakefactory(self.kernel_client.iopub_channel_class, self.target.on_iopub_msg)
-        self.kernel_client.stdin_channel_class = fakefactory(self.kernel_client.stdin_channel_class, self.target.on_stdin_msg)
-        self.kernel_client.hb_channel_class = fakefactory(self.kernel_client.hb_channel_class, self.target.on_hb_msg)
+        self.kernel_client.shell_channel_class = fakefactory(
+            self.kernel_client.shell_channel_class, self.target.on_shell_msg
+        )
+        self.kernel_client.iopub_channel_class = fakefactory(
+            self.kernel_client.iopub_channel_class, self.target.on_iopub_msg
+        )
+        self.kernel_client.stdin_channel_class = fakefactory(
+            self.kernel_client.stdin_channel_class, self.target.on_stdin_msg
+        )
+        self.kernel_client.hb_channel_class = fakefactory(
+            self.kernel_client.hb_channel_class, self.target.on_hb_msg
+        )
         self.kernel_client.start_channels()
 
     def initialize(self, target, argv):
@@ -83,11 +102,13 @@ class JupyterVimApp(JupyterApp, JupyterConsoleApp):
 class Async(object):
     """Wrapper that defers all method calls on a plugin object to the event
     loop, given that the object has vim attribute"""
+
     def __init__(self, wraps):
         self.wraps = wraps
 
     def __getattr__(self, name):
         return partial(self.wraps.vim.async_call, getattr(self.wraps, name))
+
 
 class ExclusiveHandler(object):
     """Wrapper for buffering incoming messages from a asynchronous source.
@@ -96,6 +117,7 @@ class ExclusiveHandler(object):
     be completely handled before next messsage is processed. Is used to avoid
     iopub messages being printed out-of-order or even interleaved.
     """
+
     def __init__(self, handler):
         self.msgs = deque()
         self.handler = handler
@@ -108,6 +130,7 @@ class ExclusiveHandler(object):
             while self.msgs:
                 self.handler(self.msgs.popleft())
             self.is_active = False
+
 
 @neovim.plugin
 @neovim.encoding(True)
@@ -123,7 +146,7 @@ class IPythonPlugin(object):
         self.on_iopub_msg = ExclusiveHandler(self._on_iopub_msg)
 
     def configure(self):
-        #FIXME: rethink the entire configuration interface thing
+        # FIXME: rethink the entire configuration interface thing
         # we should use dict notifictaions for runtime settings
         self.do_filetype = self.vim.vars.get("ipy_set_ft", 0)
         self.do_highlight = self.vim.vars.get("ipy_highlight", 1)
@@ -155,14 +178,14 @@ class IPythonPlugin(object):
         self.hl_handler.bold_text_enabled = True
 
     def append_outbuf(self, data):
-        #self.hl_handler.reset_sgr()
-        lineidx = len(self.buf)-1
+        # self.hl_handler.reset_sgr()
+        lineidx = len(self.buf) - 1
         lastline = self.buf[-1]
 
         lines = []
         chunks = []
 
-        #self.hl_handler.actions = []
+        # self.hl_handler.actions = []
 
         for chunk in chain([lastline], self.hl_handler.split_string(data)):
             if self.hl_handler.actions:
@@ -184,11 +207,12 @@ class IPythonPlugin(object):
                 if self.do_highlight:
                     bold = self.hl_handler.bold or self.hl_handler.intensity > 0
                     color = self.hl_handler.foreground_color
-                    if color and color > 16: color = None
+                    if color and color > 16:
+                        color = None
 
                     if color is not None:
                         if bold and color < 8:
-                            color += 8 # be bright and shiny
+                            color += 8  # be bright and shiny
                         groups.append("IPyFg{}".format(color))
 
                     if bold:
@@ -198,21 +222,21 @@ class IPythonPlugin(object):
         lines.append(chunks)
         chunks = []
 
-        #TODO: at least this part should be lua:
+        # TODO: at least this part should be lua:
         textlines = []
         hls = []
-        for i,line in enumerate(lines):
-            text = ''.join(c[1] for c in line)
+        for i, line in enumerate(lines):
+            text = "".join(c[1] for c in line)
             textlines.append(text)
             colend = 0
             for chunk in line:
                 colstart = colend
                 colend = colstart + len(chunk[1])
                 for hl in chunk[0]:
-                    hls.append([hl,lineidx+i,colstart,colend])
+                    hls.append([hl, lineidx + i, colstart, colend])
 
         self.buf[-1:] = textlines
-        calls = [["nvim_buf_add_highlight", [self.buf, -1]+hl] for hl in hls]
+        calls = [["nvim_buf_add_highlight", [self.buf, -1] + hl] for hl in hls]
         self.vim.api.call_atomic(calls)
 
         for w in self.vim.windows:
@@ -241,23 +265,21 @@ class IPythonPlugin(object):
         self.has_connection = True
 
         reply = self.waitfor(self.kc.kernel_info())
-        c = reply['content']
-        lang = c['language_info']['name']
-        langver = c['language_info']['version']
+        c = reply["content"]
+        lang = c["language_info"]["name"]
+        langver = c["language_info"]["version"]
 
-        banner = [ "nvim-ipy: Jupyter shell for Neovim"] if not has_previous else []
+        banner = ["nvim-ipy: Jupyter shell for Neovim"] if not has_previous else []
         try:
-            ipy_version = c['ipython_version']
+            ipy_version = c["ipython_version"]
         except KeyError:
             ipy_version = version_info
-        vdesc = '.'.join(str(i) for i in ipy_version[:3])
-        if len(ipy_version) >= 4 and ipy_version[3] != '':
-            vdesc += '-' + ipy_version[3]
-        banner.extend([
-                "Jupyter {}".format(vdesc),
-                "language: {} {}".format(lang, langver),
-                "",
-                ])
+        vdesc = ".".join(str(i) for i in ipy_version[:3])
+        if len(ipy_version) >= 4 and ipy_version[3] != "":
+            vdesc += "-" + ipy_version[3]
+        banner.extend(
+            ["Jupyter {}".format(vdesc), "language: {} {}".format(lang, langver), ""]
+        )
 
         if has_previous:
             pos = len(self.buf)
@@ -266,7 +288,7 @@ class IPythonPlugin(object):
             pos = 0
             self.buf[:0] = banner
         for i in range(len(banner)):
-            self.buf.add_highlight('Comment', pos+i)
+            self.buf.add_highlight("Comment", pos + i)
 
         if self.do_filetype:
             # TODO: we might want to wrap this in a sync call
@@ -278,20 +300,20 @@ class IPythonPlugin(object):
                         vim.current.window = w
                         break
                 else:
-                    return #reopen window?
+                    return  # reopen window?
 
             vim.command("set ft={}".format(lang))
 
             vim.current.window = w0
 
     def disp_status(self, status):
-        self.vim.vars['ipy_status'] = status
+        self.vim.vars["ipy_status"] = status
 
     def handle(self, msg_id, handler):
         self.pending_shell_msgs[msg_id] = handler
 
     def waitfor(self, msg_id, retval=None):
-        #FIXME: add some kind of timeout
+        # FIXME: add some kind of timeout
         gr = greenlet.getcurrent()
         self.handle(msg_id, gr)
         return gr.parent.switch(retval)
@@ -304,8 +326,8 @@ class IPythonPlugin(object):
         self.configure()
 
         window = True
-        if '--no-window' in args:
-            args.remove('--no-window')
+        if "--no-window" in args:
+            args.remove("--no-window")
             window = False
 
         # create buffer synchronously, as there is slight
@@ -319,7 +341,7 @@ class IPythonPlugin(object):
         code = args[0]
         silent = bool(args[1]) if len(args) > 1 else False
         if self.km and not self.km.is_alive():
-            choice = int(self.vim.funcs.confirm('Kernel died. Restart?', '&Yes\n&No'))
+            choice = int(self.vim.funcs.confirm("Kernel died. Restart?", "&Yes\n&No"))
             if choice == 1:
                 if self.km.has_kernel:
                     self.km.restart_kernel(True)
@@ -327,48 +349,48 @@ class IPythonPlugin(object):
                     self.km.start_kernel(**self.km._launch_args)
             return
 
-        reply = self.waitfor(self.kc.execute(code,silent=silent))
-        content = reply['content']
-        payload = content.get('payload',())
+        reply = self.waitfor(self.kc.execute(code, silent=silent))
+        content = reply["content"]
+        payload = content.get("payload", ())
         for p in payload:
             if p.get("source") == "page":
                 # TODO: if this is long, open separate window
-                if 'text' in p:
-                    self.append_outbuf(p['text'])
+                if "text" in p:
+                    self.append_outbuf(p["text"])
                 else:
-                    self.append_outbuf(p['data']['text/plain'])
+                    self.append_outbuf(p["data"]["text/plain"])
 
     @neovim.function("IPyDbgWrite", sync=True)
     def ipy_write(self, args):
         self.append_outbuf(args[0])
 
     @neovim.function("IPyComplete")
-    def ipy_complete(self,args):
+    def ipy_complete(self, args):
         line = self.vim.current.line
-        #FIXME: (upstream) this sometimes get wrong if
-        #completing just after entering insert mode:
-        #pos = self.vim.current.buffer.mark(".")[1]+1
-        pos = self.vim.funcs.col('.')-1
+        # FIXME: (upstream) this sometimes get wrong if
+        # completing just after entering insert mode:
+        # pos = self.vim.current.buffer.mark(".")[1]+1
+        pos = self.vim.funcs.col(".") - 1
 
         reply = self.waitfor(self.kc.complete(line, pos))
         content = reply["content"]
-        #TODO: check if position is still valid
-        start = content["cursor_start"]+1
-        self.vim.funcs.complete(start, content['matches'])
+        # TODO: check if position is still valid
+        start = content["cursor_start"] + 1
+        self.vim.funcs.complete(start, content["matches"])
 
     @neovim.function("IPyOmniFunc", sync=True)
-    def ipy_omnifunc(self,args):
+    def ipy_omnifunc(self, args):
         findstart, base = args
         if findstart:
             if not self.has_connection:
                 return False
             line = self.vim.current.line
-            pos = self.vim.funcs.col('.')-1
+            pos = self.vim.funcs.col(".") - 1
 
             reply = self.waitfor(self.kc.complete(line, pos))
             content = reply["content"]
             start = content["cursor_start"]
-            self._matches = content['matches']
+            self._matches = content["matches"]
             return start
         else:
             return self._matches
@@ -376,23 +398,25 @@ class IPythonPlugin(object):
     @neovim.function("IPyObjInfo")
     def ipy_objinfo(self, args):
         word, level = args
-        #TODO: send entire line
+        # TODO: send entire line
         reply = self.waitfor(self.kc.inspect(word, None, level))
 
-        c = reply['content']
+        c = reply["content"]
         if c["status"] == "error":
-            l = self.append_outbuf("\nerror when inspecting {}: {}\n".format(word, c.get("ename", "")))
+            l = self.append_outbuf(
+                "\nerror when inspecting {}: {}\n".format(word, c.get("ename", ""))
+            )
             if self.do_highlight:
-                self.buf.add_highlight("Error", l+1, 0, -1)
+                self.buf.add_highlight("Error", l + 1, 0, -1)
             if "traceback" in c:
-                self.append_outbuf('\n'.join(c['traceback'])+"\n")
+                self.append_outbuf("\n".join(c["traceback"]) + "\n")
 
-        elif not c.get('found'):
+        elif not c.get("found"):
             l = self.append_outbuf("\nnot found: {}\n".format(word))
             if self.do_highlight:
-                self.buf.add_highlight("WarningMsg", l+1, 0, -1)
+                self.buf.add_highlight("WarningMsg", l + 1, 0, -1)
         else:
-            self.append_outbuf("\n"+c['data']['text/plain']+"\n")
+            self.append_outbuf("\n" + c["data"]["text/plain"] + "\n")
 
     @neovim.function("IPyInterrupt")
     def ipy_interrupt(self, args):
@@ -403,57 +427,56 @@ class IPythonPlugin(object):
         self.km.shutdown_kernel()
 
     def _on_iopub_msg(self, m):
-        #FIXME: figure out the smoothest way to to matchaddpos
+        # FIXME: figure out the smoothest way to to matchaddpos
         # (from a different window), or just use concealends
         try:
-            t = m['header'].get('msg_type',None)
-            c = m['content']
+            t = m["header"].get("msg_type", None)
+            c = m["content"]
 
-            debug('iopub %s: %r', t, c)
-            if t == 'status':
-                status = c['execution_state']
+            debug("iopub %s: %r", t, c)
+            if t == "status":
+                status = c["execution_state"]
                 self.disp_status(status)
-            elif t in ['pyin', 'execute_input']:
-                prompt = self.prompt_in.format(c['execution_count'])
-                code = c['code'].rstrip().split('\n')
+            elif t in ["pyin", "execute_input"]:
+                prompt = self.prompt_in.format(c["execution_count"])
+                code = c["code"].rstrip().split("\n")
                 if self.max_in and len(code) > self.max_in:
-                    code = code[:self.max_in] + ['.....']
-                sep = '\n'+' '*len(prompt)
-                line = self.append_outbuf(u'\n{}{}\n'.format(prompt, sep.join(code)))
-                self.buf.add_highlight('IPyIn', line+1, 0, len(prompt))
-            elif t in ['pyout', 'execute_result']:
-                no = c['execution_count']
-                res = c['data'].get('text/plain')
+                    code = code[: self.max_in] + ["....."]
+                sep = "\n" + " " * len(prompt)
+                line = self.append_outbuf(u"\n{}{}\n".format(prompt, sep.join(code)))
+                self.buf.add_highlight("IPyIn", line + 1, 0, len(prompt))
+            elif t in ["pyout", "execute_result"]:
+                no = c["execution_count"]
+                res = c["data"].get("text/plain")
                 if res is None:
                     # TODO: still print a marker for unprintable output?
                     return
                 prompt = self.prompt_out.format(no)
-                if '\n' in res and not prompt.endswith("\n"):
+                if "\n" in res and not prompt.endswith("\n"):
                     prompt = prompt.rstrip() + "\n"
-                line = self.append_outbuf((u'{}{}\n').format(prompt, res))
-                self.buf.add_highlight('IPyOut', line, 0, len(prompt))
-            elif t in ['pyerr', 'error']:
-                #TODO: this should be made language specific
+                line = self.append_outbuf((u"{}{}\n").format(prompt, res))
+                self.buf.add_highlight("IPyOut", line, 0, len(prompt))
+            elif t in ["pyerr", "error"]:
+                # TODO: this should be made language specific
                 # as the amt of info in 'traceback' differs
-                self.append_outbuf('\n'.join(c['traceback']) + '\n')
-            elif t == 'stream':
-                #perhaps distinguish stderr using gutter marks?
-                self.append_outbuf(c['text'])
-            elif t == 'display_data':
-                d = c['data']['text/plain']
-                self.append_outbuf(d + '\n')
+                self.append_outbuf("\n".join(c["traceback"]) + "\n")
+            elif t == "stream":
+                # perhaps distinguish stderr using gutter marks?
+                self.append_outbuf(c["text"])
+            elif t == "display_data":
+                d = c["data"]["text/plain"]
+                self.append_outbuf(d + "\n")
         except Exception as e:
             debug("Couldn't handle iopub message %r: %s", m, format_exc())
 
-
     def on_shell_msg(self, m):
         self.last_msg = m
-        debug('shell %s: %r', m['msg_type'], m['content'])
-        msg_id = m['parent_header']['msg_id']
+        debug("shell %s: %r", m["msg_type"], m["content"])
+        msg_id = m["parent_header"]["msg_id"]
         try:
             handler = self.pending_shell_msgs.pop(msg_id)
         except KeyError:
-            debug('unexpected shell msg: %r', m)
+            debug("unexpected shell msg: %r", m)
             return
         if isinstance(handler, greenlet.greenlet):
             handler.parent = greenlet.getcurrent()
@@ -461,7 +484,7 @@ class IPythonPlugin(object):
         elif handler is not None:
             handler(m)
 
-    #this gets called when heartbeat is lost
+    # this gets called when heartbeat is lost
     def on_hb_msg(self, time_since):
         self.disp_status("DEAD")
 
@@ -470,7 +493,7 @@ class IPythonPlugin(object):
         try:
             res = self.vim.funcs.input("(IPy) " + msg["content"]["prompt"])
         except NvimError:
-            #TODO(nvim) return exceptions precisely
+            # TODO(nvim) return exceptions precisely
             # for now assume keyboard interrupt
             self.ipy_interrupt([])
             return

@@ -2,53 +2,53 @@
 
 vendored from jupyter qtconsole
 """
-#-----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Imports
-#-----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 
 # Standard library imports
 from collections import namedtuple
 import re
 
-#-----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Constants and datatypes
-#-----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 
 # An action for erase requests (ED and EL commands).
-EraseAction = namedtuple('EraseAction', ['action', 'area', 'erase_to'])
+EraseAction = namedtuple("EraseAction", ["action", "area", "erase_to"])
 
 # An action for cursor move requests (CUU, CUD, CUF, CUB, CNL, CPL, CHA, CUP,
 # and HVP commands).
 # FIXME: Not implemented in AnsiCodeProcessor.
-MoveAction = namedtuple('MoveAction', ['action', 'dir', 'unit', 'count'])
+MoveAction = namedtuple("MoveAction", ["action", "dir", "unit", "count"])
 
 # An action for scroll requests (SU and ST) and form feeds.
-ScrollAction = namedtuple('ScrollAction', ['action', 'dir', 'unit', 'count'])
+ScrollAction = namedtuple("ScrollAction", ["action", "dir", "unit", "count"])
 
 # An action for the carriage return character
-CarriageReturnAction = namedtuple('CarriageReturnAction', ['action'])
+CarriageReturnAction = namedtuple("CarriageReturnAction", ["action"])
 
 # An action for the \n character
-NewLineAction = namedtuple('NewLineAction', ['action'])
+NewLineAction = namedtuple("NewLineAction", ["action"])
 
 # An action for the beep character
-BeepAction = namedtuple('BeepAction', ['action'])
+BeepAction = namedtuple("BeepAction", ["action"])
 
 # An action for backspace
-BackSpaceAction = namedtuple('BackSpaceAction', ['action'])
+BackSpaceAction = namedtuple("BackSpaceAction", ["action"])
 
 # Regular expressions.
-CSI_COMMANDS = 'ABCDEFGHJKSTfmnsu'
-CSI_SUBPATTERN = '\[(.*?)([%s])' % CSI_COMMANDS
-OSC_SUBPATTERN = '\](.*?)[\x07\x1b]'
-ANSI_PATTERN = ('\x01?\x1b(%s|%s)\x02?' % \
-                (CSI_SUBPATTERN, OSC_SUBPATTERN))
-ANSI_OR_SPECIAL_PATTERN = re.compile('(\a|\b|\r(?!\n)|\r?\n)|(?:%s)' % ANSI_PATTERN)
-SPECIAL_PATTERN = re.compile('([\f])')
+CSI_COMMANDS = "ABCDEFGHJKSTfmnsu"
+CSI_SUBPATTERN = "\[(.*?)([%s])" % CSI_COMMANDS
+OSC_SUBPATTERN = "\](.*?)[\x07\x1b]"
+ANSI_PATTERN = "\x01?\x1b(%s|%s)\x02?" % (CSI_SUBPATTERN, OSC_SUBPATTERN)
+ANSI_OR_SPECIAL_PATTERN = re.compile("(\a|\b|\r(?!\n)|\r?\n)|(?:%s)" % ANSI_PATTERN)
+SPECIAL_PATTERN = re.compile("([\f])")
 
-#-----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Classes
-#-----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
+
 
 class AnsiCodeProcessor(object):
     """ Translates special ASCII characters and ANSI escape codes into readable
@@ -63,9 +63,9 @@ class AnsiCodeProcessor(object):
     # to use a custom color format.
     default_color_map = {}
 
-    #---------------------------------------------------------------------------
+    # ---------------------------------------------------------------------------
     # AnsiCodeProcessor interface
-    #---------------------------------------------------------------------------
+    # ---------------------------------------------------------------------------
 
     def __init__(self):
         self.actions = []
@@ -91,11 +91,11 @@ class AnsiCodeProcessor(object):
         # strings ending with \r are assumed to be ending in \r\n since
         # \n is appended to output strings automatically.  Accounting
         # for that, here.
-        last_char = '\n' if len(string) > 0 and string[-1] == '\n' else None
+        last_char = "\n" if len(string) > 0 and string[-1] == "\n" else None
         string = string[:-1] if last_char is not None else string
 
         for match in ANSI_OR_SPECIAL_PATTERN.finditer(string):
-            raw = string[start:match.start()]
+            raw = string[start : match.start()]
             substring = SPECIAL_PATTERN.sub(self._replace_special, raw)
             if substring or self.actions:
                 yield substring
@@ -104,25 +104,25 @@ class AnsiCodeProcessor(object):
 
             groups = [g for g in match.groups() if (g is not None)]
             g0 = groups[0]
-            if g0 == '\a':
-                self.actions.append(BeepAction('beep'))
+            if g0 == "\a":
+                self.actions.append(BeepAction("beep"))
                 yield None
                 self.actions = []
-            elif g0 == '\r':
-                self.actions.append(CarriageReturnAction('carriage-return'))
+            elif g0 == "\r":
+                self.actions.append(CarriageReturnAction("carriage-return"))
                 yield None
                 self.actions = []
-            elif g0 == '\b':
-                self.actions.append(BackSpaceAction('backspace'))
+            elif g0 == "\b":
+                self.actions.append(BackSpaceAction("backspace"))
                 yield None
                 self.actions = []
-            elif g0 == '\n' or g0 == '\r\n':
-                self.actions.append(NewLineAction('newline'))
+            elif g0 == "\n" or g0 == "\r\n":
+                self.actions.append(NewLineAction("newline"))
                 yield g0
                 self.actions = []
             else:
-                params = [ param for param in groups[1].split(';') if param ]
-                if g0.startswith('['):
+                params = [param for param in groups[1].split(";") if param]
+                if g0.startswith("["):
                     # Case 1: CSI code.
                     try:
                         params = list(map(int, params))
@@ -132,7 +132,7 @@ class AnsiCodeProcessor(object):
                     else:
                         self.set_csi_code(groups[2], params)
 
-                elif g0.startswith(']'):
+                elif g0.startswith("]"):
                     # Case 2: OSC code.
                     self.set_osc_code(params)
 
@@ -143,7 +143,7 @@ class AnsiCodeProcessor(object):
             self.actions = []
 
         if last_char is not None:
-            self.actions.append(NewLineAction('newline'))
+            self.actions.append(NewLineAction("newline"))
             yield last_char
             self.actions = []
 
@@ -158,30 +158,28 @@ class AnsiCodeProcessor(object):
         params : sequence of integers, optional
             The parameter codes for the command.
         """
-        if command == 'm':   # SGR - Select Graphic Rendition
+        if command == "m":  # SGR - Select Graphic Rendition
             if params:
                 self.set_sgr_code(params)
             else:
                 self.set_sgr_code([0])
 
-        elif (command == 'J' or # ED - Erase Data
-              command == 'K'):  # EL - Erase in Line
+        elif command == "J" or command == "K":  # ED - Erase Data  # EL - Erase in Line
             code = params[0] if params else 0
             if 0 <= code <= 2:
-                area = 'screen' if command == 'J' else 'line'
+                area = "screen" if command == "J" else "line"
                 if code == 0:
-                    erase_to = 'end'
+                    erase_to = "end"
                 elif code == 1:
-                    erase_to = 'start'
+                    erase_to = "start"
                 elif code == 2:
-                    erase_to = 'all'
-                self.actions.append(EraseAction('erase', area, erase_to))
+                    erase_to = "all"
+                self.actions.append(EraseAction("erase", area, erase_to))
 
-        elif (command == 'S' or # SU - Scroll Up
-              command == 'T'):  # SD - Scroll Down
-            dir = 'up' if command == 'S' else 'down'
+        elif command == "S" or command == "T":  # SU - Scroll Up  # SD - Scroll Down
+            dir = "up" if command == "S" else "down"
             count = params[0] if params else 1
-            self.actions.append(ScrollAction('scroll', dir, 'line', count))
+            self.actions.append(ScrollAction("scroll", dir, "line", count))
 
     def set_osc_code(self, params):
         """ Set attributes based on OSC (Operating System Command) parameters.
@@ -260,24 +258,21 @@ class AnsiCodeProcessor(object):
         # Recurse with unconsumed parameters.
         self.set_sgr_code(params)
 
-    #---------------------------------------------------------------------------
+    # ---------------------------------------------------------------------------
     # Protected interface
-    #---------------------------------------------------------------------------
+    # ---------------------------------------------------------------------------
 
     def _parse_xterm_color_spec(self, spec):
-        if spec.startswith('rgb:'):
-            return tuple(map(lambda x: int(x, 16), spec[4:].split('/')))
-        elif spec.startswith('rgbi:'):
-            return tuple(map(lambda x: int(float(x) * 255),
-                             spec[5:].split('/')))
-        elif spec == '?':
-            raise ValueError('Unsupported xterm color spec')
+        if spec.startswith("rgb:"):
+            return tuple(map(lambda x: int(x, 16), spec[4:].split("/")))
+        elif spec.startswith("rgbi:"):
+            return tuple(map(lambda x: int(float(x) * 255), spec[5:].split("/")))
+        elif spec == "?":
+            raise ValueError("Unsupported xterm color spec")
         return spec
 
     def _replace_special(self, match):
         special = match.group(1)
-        if special == '\f':
-            self.actions.append(ScrollAction('scroll', 'down', 'page', 1))
-        return ''
-
-
+        if special == "\f":
+            self.actions.append(ScrollAction("scroll", "down", "page", 1))
+        return ""
