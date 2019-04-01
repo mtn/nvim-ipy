@@ -4,8 +4,8 @@ from collections import deque
 import os, sys
 import json
 import re
-import neovim
-from neovim.api import NvimError
+import pynvim
+from pynvim.api import NvimError
 
 from itertools import chain
 
@@ -132,8 +132,8 @@ class ExclusiveHandler(object):
             self.is_active = False
 
 
-@neovim.plugin
-@neovim.encoding(True)
+@pynvim.plugin
+@pynvim.encoding(True)
 class IPythonPlugin(object):
     def __init__(self, vim):
         self.vim = vim
@@ -167,7 +167,7 @@ class IPythonPlugin(object):
         buf = vim.current.buffer
         buf.options["swapfile"] = False
         buf.options["buftype"] = "nofile"
-        buf.name = "[jupyter]"
+        buf.name = "[~]"
 
         if not window:
             vim.command(":q")
@@ -269,7 +269,7 @@ class IPythonPlugin(object):
         lang = c["language_info"]["name"]
         langver = c["language_info"]["version"]
 
-        banner = ["nvim-ipy: Jupyter shell for Neovim"] if not has_previous else []
+        banner = ["nvim-ipy: Jupyter shell for pynvim"] if not has_previous else []
         try:
             ipy_version = c["ipython_version"]
         except KeyError:
@@ -321,7 +321,7 @@ class IPythonPlugin(object):
     def ignore(self, msg_id):
         self.handle(msg_id, None)
 
-    @neovim.function("IPyConnect", sync=True)
+    @pynvim.function("IPyConnect", sync=True)
     def ipy_connect(self, args):
         self.configure()
 
@@ -336,7 +336,7 @@ class IPythonPlugin(object):
         # 'connect' waits for kernelinfo, and so must be async
         Async(self).connect(args)
 
-    @neovim.function("IPyRun")
+    @pynvim.function("IPyRun")
     def ipy_run(self, args):
         code = args[0]
         silent = bool(args[1]) if len(args) > 1 else False
@@ -360,11 +360,11 @@ class IPythonPlugin(object):
                 else:
                     self.append_outbuf(p["data"]["text/plain"])
 
-    @neovim.function("IPyDbgWrite", sync=True)
+    @pynvim.function("IPyDbgWrite", sync=True)
     def ipy_write(self, args):
         self.append_outbuf(args[0])
 
-    @neovim.function("IPyComplete")
+    @pynvim.function("IPyComplete")
     def ipy_complete(self, args):
         line = self.vim.current.line
         # FIXME: (upstream) this sometimes get wrong if
@@ -378,7 +378,7 @@ class IPythonPlugin(object):
         start = content["cursor_start"] + 1
         self.vim.funcs.complete(start, content["matches"])
 
-    @neovim.function("IPyOmniFunc", sync=True)
+    @pynvim.function("IPyOmniFunc", sync=True)
     def ipy_omnifunc(self, args):
         findstart, base = args
         if findstart:
@@ -395,7 +395,7 @@ class IPythonPlugin(object):
         else:
             return self._matches
 
-    @neovim.function("IPyObjInfo")
+    @pynvim.function("IPyObjInfo")
     def ipy_objinfo(self, args):
         word, level = args
         # TODO: send entire line
@@ -418,11 +418,11 @@ class IPythonPlugin(object):
         else:
             self.append_outbuf("\n" + c["data"]["text/plain"] + "\n")
 
-    @neovim.function("IPyInterrupt")
+    @pynvim.function("IPyInterrupt")
     def ipy_interrupt(self, args):
         self.km.interrupt_kernel()
 
-    @neovim.function("IPyTerminate")
+    @pynvim.function("IPyTerminate")
     def ipy_terminate(self, args):
         self.km.shutdown_kernel()
 
