@@ -176,6 +176,7 @@ class IPythonPlugin(object):
         if not window:
             vim.command(":q")
 
+        self.out_win = vim.current.window
         vim.current.window = w0
         self.buf = buf
         self.hl_handler = AnsiCodeProcessor()
@@ -224,7 +225,6 @@ class IPythonPlugin(object):
         lines.append(chunks)
         chunks = []
 
-        # TODO: at least this part should be lua:
         textlines = []
         hls = []
         for i, line in enumerate(lines):
@@ -456,9 +456,9 @@ class IPythonPlugin(object):
             self.vim.err_write("No execution saved for current line.\n")
             return
 
-        # open_wins = 
-
-        assert False, current_line
+        output_line = self.out_lines[self.executions[hashed]]
+        self.vim.current.window = self.out_win
+        self.vim.request("nvim_win_set_cursor", self.out_win, (output_line, 1))
 
     def _on_iopub_msg(self, m):
         try:
@@ -482,7 +482,7 @@ class IPythonPlugin(object):
 
                 # Record the current cursor position for easy jumping
                 execution_count = m["content"]["execution_count"]
-                self.out_lines[execution_count] = line
+                self.out_lines[execution_count] = line + 2
 
             elif t in ["pyout", "execute_result"]:
                 no = c["execution_count"]
