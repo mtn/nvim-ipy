@@ -11,6 +11,7 @@ inoremap <Plug>(IPy-Complete) <Cmd>call IPyComplete()<cr>
 noremap <Plug>(IPy-WordObjInfo) :call IPyObjInfo(<SID>get_current_word(), 0)<cr>
 noremap <Plug>(IPy-Interrupt) <Cmd>call IPyInterrupt()<cr>
 noremap <Plug>(IPy-Terminate) <Cmd>call IPyTerminate()<cr>
+nnoremap <Plug>(IPy-JumpToOutput) <Cmd>call IPyJumpToOutput()<cr>
 
 " make this overrideable
 hi IPyIn ctermfg=green cterm=bold guifg=LimeGreen gui=bold
@@ -123,5 +124,6 @@ if g:nvim_ipy_perform_mappings
     imap <silent> <C-F> <Plug>(IPy-Complete)
     map <silent> <F8> <Plug>(IPy-Interrupt)
     map <silent> <leader>? <Plug>(IPy-WordObjInfo)
+    map <silent> <F4>       <Plug>(IPy-JumpToOutput)
     "set titlestring=%t%(\ %M%)%(\ (%{expand(\"%:p:h\")})%)%(\ %a%)%(\ -\ %{g:ipy_status}%)
 endif

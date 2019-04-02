@@ -1,6 +1,7 @@
 from __future__ import print_function, division
 from functools import partial, wraps
 from collections import deque
+import hashlib
 import os, sys
 import json
 import re
@@ -137,7 +138,10 @@ class ExclusiveHandler(object):
 class IPythonPlugin(object):
     def __init__(self, vim):
         self.vim = vim
+        self.executions = {} # hash of line contents -> output execution indices
+        self.out_lines = {}  # output execution indices  -> output buffer line numbers
         self.buf = None
+        self.out_win = None
         self.has_connection = False
 
         self.pending_shell_msgs = {}
@@ -185,8 +189,6 @@ class IPythonPlugin(object):
         lines = []
         chunks = []
 
-        # self.hl_handler.actions = []
-
         for chunk in chain([lastline], self.hl_handler.split_string(data)):
             if self.hl_handler.actions:
                 assert len(self.hl_handler.actions) == 1
@@ -226,6 +228,12 @@ class IPythonPlugin(object):
         textlines = []
         hls = []
         for i, line in enumerate(lines):
+            # Only attempt to display the first line
+            # TODO in progress
+            if i == 0:
+                calling_buf = self.vim.current.buffer
+                self.vim.request("nvim_buf_set_virtual_text", calling_buf, 0, 0, [["hi"]], {})
+
             text = "".join(c[1] for c in line)
             textlines.append(text)
             colend = 0
@@ -340,6 +348,10 @@ class IPythonPlugin(object):
     def ipy_run(self, args):
         code = args[0]
         silent = bool(args[1]) if len(args) > 1 else False
+        if not hasattr(self, "km"):
+            # TODO error doesn't display in visual mode
+            self.vim.err_write("No i.nvim process is running.\n")
+            return
         if self.km and not self.km.is_alive():
             choice = int(self.vim.funcs.confirm("Kernel died. Restart?", "&Yes\n&No"))
             if choice == 1:
@@ -350,11 +362,18 @@ class IPythonPlugin(object):
             return
 
         reply = self.waitfor(self.kc.execute(code, silent=silent))
+
+        # Hash the contents each line (after doing a bit of pre-processing), and map
+        # that to the line of the execution (retrieval will be a normal mode function,
+        # not visual mode so no need to deal with multi-lines)
+        for code_line in code.split("\n"):
+            hashed_line = hashlib.sha224(code_line.replace(" ", "").lower().encode()).hexdigest()
+            self.executions[hashed_line] = reply["content"]["execution_count"]
+
         content = reply["content"]
         payload = content.get("payload", ())
         for p in payload:
             if p.get("source") == "page":
-                # TODO: if this is long, open separate window
                 if "text" in p:
                     self.append_outbuf(p["text"])
                 else:
@@ -419,24 +438,39 @@ class IPythonPlugin(object):
             self.append_outbuf("\n" + c["data"]["text/plain"] + "\n")
 
     @pynvim.function("IPyInterrupt")
-    def ipy_interrupt(self, args):
+    def ipy_interrupt(self, _):
         self.km.interrupt_kernel()
 
     @pynvim.function("IPyTerminate")
-    def ipy_terminate(self, args):
+    def ipy_terminate(self, _):
         self.km.shutdown_kernel()
 
+    @pynvim.function("IPyJumpToOutput")
+    def ipy_jump_to_output(self, _):
+        "Jump to the buffered output that lies under the current line"
+
+        current_line = self.vim.current.line
+        hashed = hashlib.sha224(current_line.replace(" ", "").lower().encode()).hexdigest()
+
+        if hashed not in self.executions:
+            self.vim.err_write("No execution saved for current line.\n")
+            return
+
+        # open_wins = 
+
+        assert False, current_line
+
     def _on_iopub_msg(self, m):
-        # FIXME: figure out the smoothest way to to matchaddpos
-        # (from a different window), or just use concealends
         try:
             t = m["header"].get("msg_type", None)
             c = m["content"]
 
             debug("iopub %s: %r", t, c)
+
             if t == "status":
                 status = c["execution_state"]
                 self.disp_status(status)
+
             elif t in ["pyin", "execute_input"]:
                 prompt = self.prompt_in.format(c["execution_count"])
                 code = c["code"].rstrip().split("\n")
@@ -445,6 +479,11 @@ class IPythonPlugin(object):
                 sep = "\n" + " " * len(prompt)
                 line = self.append_outbuf(u"\n{}{}\n".format(prompt, sep.join(code)))
                 self.buf.add_highlight("IPyIn", line + 1, 0, len(prompt))
+
+                # Record the current cursor position for easy jumping
+                execution_count = m["content"]["execution_count"]
+                self.out_lines[execution_count] = line
+
             elif t in ["pyout", "execute_result"]:
                 no = c["execution_count"]
                 res = c["data"].get("text/plain")
@@ -454,18 +493,23 @@ class IPythonPlugin(object):
                 prompt = self.prompt_out.format(no)
                 if "\n" in res and not prompt.endswith("\n"):
                     prompt = prompt.rstrip() + "\n"
+                # TODO in progress
                 line = self.append_outbuf((u"{}{}\n").format(prompt, res))
                 self.buf.add_highlight("IPyOut", line, 0, len(prompt))
+
             elif t in ["pyerr", "error"]:
                 # TODO: this should be made language specific
                 # as the amt of info in 'traceback' differs
                 self.append_outbuf("\n".join(c["traceback"]) + "\n")
+
             elif t == "stream":
                 # perhaps distinguish stderr using gutter marks?
                 self.append_outbuf(c["text"])
+
             elif t == "display_data":
                 d = c["data"]["text/plain"]
                 self.append_outbuf(d + "\n")
+
         except Exception as e:
             debug("Couldn't handle iopub message %r: %s", m, format_exc())
 
